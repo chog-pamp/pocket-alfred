@@ -1,0 +1,6 @@
+/home/leo/homelab/pocket-alfred/tools/oww-venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:197: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'AzureExecutionProvider, CPUExecutionProvider'
+  warnings.warn(
+positives (n=1000): mean=0.992 frac>=0.5=1.0000 frac>=0.7=1.0000
+near-miss (n=320): mean=0.986 max=0.993 FPR@0.5=0.9969 FPR@0.6=0.9969
+clips still >=0.5: [(np.float32(0.99224055), 'nearmiss_0000.wav'), (np.float32(0.9922463), 'nearmiss_0001.wav'), (np.float32(0.9923744), 'nearmiss_0002.wav'), (np.float32(0.99197435), 'nearmiss_0003.wav'), (np.float32(0.8255615), 'nearmiss_0004.wav'), (np.float32(0.946759), 'nearmiss_0005.wav'), (np.float32(0.9699545), 'nearmiss_0006.wav'), (np.float32(0.99222636), 'nearmiss_0007.wav'), (np.float32(0.99187493), 'nearmiss_0008.wav'), (np.float32(0.9743392), 'nearmiss_0009.wav')]
+santa barbara: 36955 frames (0.82 h) FA@0.5=4189 (5100.93/h) max_score=0.992

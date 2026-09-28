@@ -1,0 +1,11 @@
+/home/leo/homelab/pocket-alfred/tools/oww-venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:197: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'AzureExecutionProvider, CPUExecutionProvider'
+  warnings.warn(
+negative_nearmiss/nearmiss_0000.wav: dur=0.87s
+  scores: [0.0, 0.0, 0.0, 0.0, 0.0, np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.053), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.99), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.99), np.float32(0.992), np.float32(0.992), np.float32(0.992)]
+  energy: [3928, 3162, 2038]
+negative_nearmiss/nearmiss_0004.wav: dur=0.68s
+  scores: [0.0, 0.0, 0.0, 0.0, 0.0, np.float32(0.992), np.float32(0.992), np.float32(0.991), np.float32(0.991), np.float32(0.989), np.float32(0.98), np.float32(0.944), np.float32(0.032), np.float32(0.005), np.float32(0.005), np.float32(0.006), np.float32(0.006), np.float32(0.005), np.float32(0.005), np.float32(0.018), np.float32(0.022), np.float32(0.017), np.float32(0.013), np.float32(0.02), np.float32(0.242), np.float32(0.705), np.float32(0.174), np.float32(0.213), np.float32(0.676), np.float32(0.826), np.float32(0.189), np.float32(0.05), np.float32(0.059)]
+  energy: [2222, 1919, 268]
+POS hey_alfred_0000.wav: dur=0.65s
+  scores: [0.0, 0.0, 0.0, 0.0, 0.0, np.float32(0.019), np.float32(0.07), np.float32(0.051), np.float32(0.031), np.float32(0.01), np.float32(0.006), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.005), np.float32(0.04), np.float32(0.992), np.float32(0.992), np.float32(0.991), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.991), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992), np.float32(0.992)]
+  energy: [4518, 1306, 340]

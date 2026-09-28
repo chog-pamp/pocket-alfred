@@ -1,0 +1,5 @@
+/home/leo/homelab/pocket-alfred/tools/oww-venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:197: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'AzureExecutionProvider, CPUExecutionProvider'
+  warnings.warn(
+positives (n=1000): mean=0.952 frac>=0.5=1.0000
+near-miss streaming (n=320): mean=0.949 max=0.953 FPR@0.5=1.0000 FPR@0.6=1.0000
+santa barbara: 36955 frames (0.82 h) FA@0.5=6384 (7773.78/h) max=0.954

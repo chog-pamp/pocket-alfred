@@ -1,0 +1,47 @@
+/home/leo/homelab/pocket-alfred/tools/oww-venv/lib/python3.13/site-packages/onnxruntime/capi/onnxruntime_inference_collection.py:197: UserWarning: Specified provider 'CUDAExecutionProvider' is not in available provider names.Available providers: 'AzureExecutionProvider, CPUExecutionProvider'
+  warnings.warn(
+embedding shape per 3s clip: (28, 96)
+0it [00:00, ?it/s]200it [00:00, 301639.99it/s]
+  0%|          | 0/200 [00:00<?, ?it/s]100%|██████████| 200/200 [00:00<00:00, 8052.73it/s]
+0it [00:00, ?it/s]1000it [00:00, 375027.18it/s]
+  0%|          | 0/1000 [00:00<?, ?it/s] 38%|███▊      | 376/1000 [00:00<00:00, 3759.77it/s] 75%|███████▌  | 752/1000 [00:00<00:00, 3369.43it/s]100%|██████████| 1000/1000 [00:00<00:00, 3133.82it/s]
+0it [00:00, ?it/s]320it [00:00, 359447.58it/s]
+  0%|          | 0/320 [00:00<?, ?it/s] 69%|██████▉   | 221/320 [00:00<00:00, 2203.44it/s]100%|██████████| 320/320 [00:00<00:00, 2342.71it/s]
+1122 negative clips after filtering (~4.02 hours)
+0it [00:00, ?it/s]500it [00:00, 299037.79it/s]
+  0%|          | 0/500 [00:00<?, ?it/s] 52%|█████▏    | 260/500 [00:00<00:00, 2592.84it/s]100%|██████████| 500/500 [00:00<00:00, 2573.53it/s]
+500 positive clips after filtering
+pos features:   0%|          | 0/31 [00:00<?, ?it/s]pos features:   3%|▎         | 1/31 [00:00<00:24,  1.23it/s]pos features:   6%|▋         | 2/31 [00:01<00:23,  1.21it/s]pos features:  10%|▉         | 3/31 [00:02<00:23,  1.20it/s]pos features:  13%|█▎        | 4/31 [00:03<00:22,  1.22it/s]pos features:  16%|█▌        | 5/31 [00:04<00:20,  1.26it/s]pos features:  19%|█▉        | 6/31 [00:04<00:20,  1.24it/s]pos features:  23%|██▎       | 7/31 [00:05<00:19,  1.24it/s]pos features:  26%|██▌       | 8/31 [00:06<00:18,  1.24it/s]pos features:  29%|██▉       | 9/31 [00:07<00:17,  1.26it/s]pos features:  32%|███▏      | 10/31 [00:08<00:16,  1.25it/s]pos features:  35%|███▌      | 11/31 [00:08<00:15,  1.25it/s]pos features:  39%|███▊      | 12/31 [00:09<00:14,  1.28it/s]pos features:  42%|████▏     | 13/31 [00:10<00:13,  1.29it/s]pos features:  45%|████▌     | 14/31 [00:11<00:13,  1.26it/s]pos features:  48%|████▊     | 15/31 [00:11<00:12,  1.27it/s]pos features:  52%|█████▏    | 16/31 [00:12<00:11,  1.25it/s]pos features:  55%|█████▍    | 17/31 [00:13<00:11,  1.24it/s]pos features:  58%|█████▊    | 18/31 [00:14<00:10,  1.24it/s]pos features:  61%|██████▏   | 19/31 [00:15<00:09,  1.26it/s]pos features:  65%|██████▍   | 20/31 [00:15<00:08,  1.26it/s]pos features:  68%|██████▊   | 21/31 [00:16<00:07,  1.27it/s]pos features:  71%|███████   | 22/31 [00:17<00:07,  1.28it/s]pos features:  74%|███████▍  | 23/31 [00:18<00:06,  1.26it/s]pos features:  77%|███████▋  | 24/31 [00:19<00:05,  1.27it/s]pos features:  81%|████████  | 25/31 [00:19<00:04,  1.27it/s]pos features:  84%|████████▍ | 26/31 [00:20<00:03,  1.29it/s]pos features:  87%|████████▋ | 27/31 [00:21<00:03,  1.29it/s]pos features:  90%|█████████ | 28/31 [00:22<00:02,  1.30it/s]pos features:  94%|█████████▎| 29/31 [00:22<00:01,  1.31it/s]pos features:  97%|█████████▋| 30/31 [00:23<00:00,  1.29it/s]pos features: 100%|██████████| 31/31 [00:24<00:00,  1.30it/s]pos features: 100%|██████████| 31/31 [00:24<00:00,  1.25it/s]
+0it [00:00, ?it/s]1it [00:00, 67.14it/s]
+positive features: (500, 28, 96)
+neg features:   0%|          | 0/2000 [00:00<?, ?it/s]neg features:  32%|███▏      | 639/2000 [00:10<00:22, 61.45it/s]neg features:  64%|██████▍   | 1278/2000 [00:19<00:11, 64.92it/s]neg features:  96%|█████████▌| 1918/2000 [00:29<00:01, 65.34it/s]neg features: 100%|██████████| 2000/2000 [00:33<00:00, 56.19it/s]neg features: 100%|██████████| 2000/2000 [00:33<00:00, 59.74it/s]
+  0%|          | 0/1 [00:00<?, ?it/s]2it [00:00, 41.05it/s]               
+W0923 22:07:41.311000 543312 torch/onnx/_internal/exporter/_registration.py:107] torchvision is not installed. Skipping torchvision::nms
+W0923 22:07:41.311000 543312 torch/onnx/_internal/exporter/_registration.py:107] torchvision is not installed. Skipping torchvision::roi_align
+W0923 22:07:41.311000 543312 torch/onnx/_internal/exporter/_registration.py:107] torchvision is not installed. Skipping torchvision::roi_pool
+W0923 22:07:41.312000 543312 torch/onnx/_internal/exporter/_registration.py:107] torchvision is not installed. Skipping torchvision::deform_conv2d
+negative features: (2000, 28, 96)
+train=2250 val=250 pos_frac=0.200
+epoch 0: loss=0.1790 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 1: loss=0.1683 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 2: loss=0.1629 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 3: loss=0.1578 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 4: loss=0.1566 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 5: loss=0.1477 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 6: loss=0.1415 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 7: loss=0.1244 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 8: loss=0.0959 val_acc=0.7800 val_fpr@0.5=0.0000 val_recall=0.0000
+epoch 9: loss=0.0586 val_acc=0.9560 val_fpr@0.5=0.0000 val_recall=0.8000
+epoch 10: loss=0.0411 val_acc=0.9920 val_fpr@0.5=0.0000 val_recall=0.9636
+epoch 11: loss=0.0295 val_acc=0.9920 val_fpr@0.5=0.0000 val_recall=0.9636
+[torch.onnx] Obtain model graph for `Sequential([...]` with `torch.export.export(..., strict=False)`...
+[torch.onnx] Obtain model graph for `Sequential([...]` with `torch.export.export(..., strict=False)`... ✅
+[torch.onnx] Run decompositions...
+[torch.onnx] Run decompositions... ✅
+[torch.onnx] Translate the graph into ONNX...
+[torch.onnx] Translate the graph into ONNX... ✅
+[torch.onnx] Optimize the ONNX graph...
+[torch.onnx] Optimize the ONNX graph... ✅
+exported: /home/leo/homelab/pocket-alfred/tools/train_alfred/hey_alfred.onnx 13722 bytes
+BEST val_acc: 0.992
+FINAL val_fpr@0.5: 0.0

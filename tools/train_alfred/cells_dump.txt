@@ -1,0 +1,547 @@
+===== cell 0 [markdown] =====
+# Introduction
+
+This notebook demonstrates the process of training a new openWakeWord model, using synthetic speech generated with open-source TTS models, and negative data representing music, noise, and speech. While the process here is complete, only small samples of datasets are utilized so that a new model can be trained on CPUs. In practice, much larger volumes of data (both positive and negitive examples) is needed to produce robust models. See the [documentation](https://github.com/dscripka/openWakeWord/tree/main/docs/models) for the pre-trained openWakeWord models for more information about how these models were trained.
+
+===== cell 1 [markdown] =====
+To start, we'll need to install the requirements needed to train new openWakeWord models.
+
+===== cell 2 [code] =====
+# Install requirements (it's recommended that you do this in a new virtual environment)
+
+# !pip install openwakeword
+# !pip install speechbrain
+# !pip install datasets
+# !pip install scipy matplotlib
+
+===== cell 3 [code] =====
+# Imports
+
+import os
+import collections
+import numpy as np
+from numpy.lib.format import open_memmap
+from pathlib import Path
+from tqdm import tqdm
+import openwakeword
+import openwakeword.data
+import openwakeword.utils
+import openwakeword.metrics
+
+import scipy
+import datasets
+import matplotlib.pyplot as plt
+import torch
+from torch import nn
+import IPython.display as ipd
+
+===== cell 4 [markdown] =====
+# Data Preparation
+
+===== cell 5 [markdown] =====
+## Download Data
+
+===== cell 6 [markdown] =====
+Next we'll load the data used for training. For the purposes of this demonstration, we'll use a small set of positive and negative.
+
+For the positive data, there are ~3400 synthetic examples of the phrase "turn on the office lights" that were produced with the text-to-speech models documented in a [separate repo](https://github.com/dscripka/synthetic_speech_dataset_generation).
+
+These positive examples can be downloaded [here](https://f002.backblazeb2.com/file/openwakeword-resources/data/turn_on_the_office_lights.tar.gz).
+
+For negative data, we'll use small, already prepared samples of the [fma-large dataset](https://github.com/mdeff/fma) for music, the [FSD50k dataset](https://zenodo.org/record/4060432#.Y-hA2BzMJhE) for noise, and the [Common Voice 11](https://huggingface.co/datasets/mozilla-foundation/common_voice_11_0) dataset for speech.
+
+The fma-large sample can be downloaded [here](https://f002.backblazeb2.com/file/openwakeword-resources/data/fma_sample.zip), and then extracted into the working director.
+
+The FSD50k sample can be downloaded [here](https://f002.backblazeb2.com/file/openwakeword-resources/data/fsd50k_sample.zip), and then extracted into the working directory.
+
+And we'll use the HuggingFace Datasets library to get a portion of the test split of the Common Voice 11 (CV11) corpus.
+
+Note the data provided here is intended for non-commerical applications only; you will need to verify the license status of this (and other) data if you intend to use it for comme
+
+===== cell 7 [code] =====
+# Download CV11 test split from HuggingFace, and convert the audio into 16 khz, 16-bit wav files
+
+cv_11 = datasets.load_dataset("mozilla-foundation/common_voice_11_0", "en", split="test", streaming=True)
+cv_11 = cv_11.cast_column("audio", datasets.Audio(sampling_rate=16000, mono=True)) # convert to 16-khz
+cv_11 = iter(cv_11)
+
+# Convert and save clips (only first 5000)
+limit = 5000
+for i in tqdm(range(limit)):
+    example = next(cv_11)
+    output = os.path.join("cv11_test_clips", example["path"][0:-4] + ".wav")
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+
+    wav_data = (example["audio"]["array"]*32767).astype(np.int16) # convert to 16-bit PCM format
+    scipy.io.wavfile.write(output, 16000, wav_data)
+
+
+===== cell 8 [markdown] =====
+## Compute Audio Embeddings
+
+===== cell 9 [markdown] =====
+Once all the data is downloaded, we can now get the audio embeddings for the positive and negative clips. As this part of the openWakeWord model is frozen (i.e., not updated during training), it makes sense to pre-compute these features so that they only need to be prepared once.
+
+===== cell 10 [code] =====
+# Create audio pre-processing object to get openWakeWord audio embeddings
+
+F = openwakeword.utils.AudioFeatures()
+
+===== cell 11 [markdown] =====
+### Negative Clips
+
+===== cell 12 [code] =====
+# Get negative example paths, filtering out clips that are too long or too short
+
+negative_clips, negative_durations = openwakeword.data.filter_audio_paths(
+    [
+        "fma_sample",
+        "fsd50k_sample",
+        "cv11_test_clips"
+    ],
+    min_length_secs = 1.0, # minimum clip length in seconds
+    max_length_secs = 60*30, # maximum clip length in seconds
+    duration_method = "header" # use the file header to calculate duration
+)
+
+print(f"{len(negative_clips)} negative clips after filtering, representing ~{sum(negative_durations)//3600} hours")
+
+===== cell 13 [code] =====
+# Use HuggingFace datasets to load files from disk by batches
+
+audio_dataset = datasets.Dataset.from_dict({"audio": negative_clips})
+audio_dataset = audio_dataset.cast_column("audio", datasets.Audio(sampling_rate=16000))
+
+===== cell 14 [code] =====
+# Get audio embeddings (features) for negative clips and save to .npy file
+# Process files by batch and save to Numpy memory mapped file so that
+# an array larger than the available system memory can be created
+
+batch_size = 64 # number of files to load, compute features, and write to mmap at a time
+clip_size = 3  # the desired window size (in seconds) for the trained openWakeWord model
+N_total = int(sum(negative_durations)//clip_size) # maximum number of rows in mmap file
+n_feature_cols = F.get_embedding_shape(clip_size)
+
+output_file = "negative_features.npy"
+output_array_shape = (N_total, n_feature_cols[0], n_feature_cols[1])
+fp = open_memmap(output_file, mode='w+', dtype=np.float32, shape=output_array_shape)
+
+row_counter = 0
+for i in tqdm(np.arange(0, audio_dataset.num_rows, batch_size)):
+    # Load data in batches and shape into rectangular array
+    wav_data = [(j["array"]*32767).astype(np.int16) for j in audio_dataset[i:i+batch_size]["audio"]]
+    wav_data = openwakeword.data.stack_clips(wav_data, clip_size=16000*clip_size).astype(np.int16)
+    
+    # Compute features (increase ncpu argument for faster processing)
+    features = F.embed_clips(x=wav_data, batch_size=1024, ncpu=8)
+    
+    # Save computed features to mmap array file (stopping once the desired size is reached)
+    if row_counter + features.shape[0] > N_total:
+        fp[row_counter:min(row_counter+features.shape[0], N_total), :, :] = features[0:N_total - row_counter, :, :]
+        fp.flush()
+        break
+
+
+===== cell 15 [markdown] =====
+Now we have all of the negative features prepared, and saved to fixed durations clips in a Numpy array. For this data, the array is small at ~160 MB, but in-practice the memory mapping allows the array to be very large (e.g., 100s of GBs).
+
+===== cell 16 [markdown] =====
+### Positive Clips
+
+===== cell 17 [markdown] =====
+First, [download](https://f002.backblazeb2.com/file/openwakeword-resources/data/turn_on_the_office_lights.tar.gz) and extract the positive clips into the working directory.
+
+Then the positive clips will be prepared in two way:
+
+1) Mixing the synthetic positive clips with negative data at random SNRs to simulate noise data
+
+2) Aligning the positive clips with background data such that the end of the input window aligns with the end of the positive clip. This way the model will learn to predict the presence of the wakeword/phrase immediately after it is spoken.
+
+In practice, there are other possible ways to augment the positive data (e.g., creating reverberation with room impulse response files, mixing with synthetic noise, etc.) but in practice we have observed that mixing with realistic background data provides the best results. Again, see the [documentation](https://github.com/dscripka/openWakeWord/tree/main/docs/models) for the pre-trained openWakeWord models for more information about the types of data augmentation used.
+
+After this prepartion, the positive clips will be converted into the openWakeWord features in the same way as the negative files.
+
+===== cell 18 [code] =====
+# Get positive example paths, filtering out clips that are too long or too short
+
+positive_clips, durations = openwakeword.data.filter_audio_paths(
+    [
+        "turn_on_the_office_lights"
+    ],
+    min_length_secs = 1.0, # minimum clip length in seconds
+    max_length_secs = 2.0, # maximum clip length in seconds
+    duration_method = "header" # use the file header to calculate duration
+)
+
+print(f"{len(positive_clips)} positive clips after filtering")
+
+===== cell 19 [code] =====
+# Define starting point for each positive clip based on its length, so that each one ends 
+# between 0-200 ms from the end of the total window size chosen for the model.
+# This results in the model being most confident in the prediction right after the
+# end of the wakeword in the audio stream, reducing latency in operation.
+
+# Get start and end positions for the positive audio in the full window
+sr = 16000
+total_length_seconds = 3 # must be the some window length as that used for the negative examples
+total_length = int(sr*total_length_seconds)
+
+jitters = (np.random.uniform(0, 0.2, len(positive_clips))*sr).astype(np.int32)
+starts = [total_length - (int(np.ceil(i*sr))+j) for i,j in zip(durations, jitters)]
+ends = [int(i*sr) + j for i, j in zip(durations, starts)]
+
+# Create generator to mix the positive audio with background audio
+batch_size = 8
+mixing_generator = openwakeword.data.mix_clips_batch(
+    foreground_clips = positive_clips,
+    background_clips = negative_clips,
+    combined_size = total_length,
+    batch_size = batch_size,
+    snr_low = 5,
+    snr_high = 15,
+    start_index = starts,
+    volume_augmentation=True, # randomly scale the volume of the audio after mixing
+)
+
+
+===== cell 20 [code] =====
+# (Optionally) listen to mixed clips to confirm that the mixing appears correct
+
+mixed_clips, labels, background_clips = next(mixing_generator)
+ipd.display(ipd.Audio(mixed_clips[0], rate=16000, normalize=True, autoplay=False))
+
+===== cell 21 [code] =====
+# Iterate through the mixing generator, computing audio features for positive examples and saving them
+
+N_total = len(positive_clips) # maximum number of rows in mmap file
+n_feature_cols = F.get_embedding_shape(total_length_seconds)
+
+output_file = "turn_on_the_office_lights_features.npy"
+output_array_shape = (N_total, n_feature_cols[0], n_feature_cols[1])
+
+fp = open_memmap(output_file, mode='w+', dtype=np.float32, shape=output_array_shape)
+
+row_counter = 0
+for batch in tqdm(mixing_generator, total=N_total//batch_size):
+    batch, lbls, background = batch[0], batch[1], batch[2]
+    
+    # Compute audio features
+    features = F.embed_clips(batch, batch_size=256)
+
+    # Save computed features
+    fp[row_counter:row_counter+features.shape[0], :, :] = features
+    row_counter += features.shape[0]
+    fp.flush()
+    
+    if row_counter >= N_total:
+        break
+
+# Trip empty rows from the mmapped array
+openwakeword.data.trim_mmap(output_file)
+
+
+===== cell 22 [markdown] =====
+Alright! At this point the positive and negative features have been pre-computed and saved to disk, and now a model can be trained that takes these features and predicts whether the wakeword/phrase is present.
+
+===== cell 23 [markdown] =====
+# Training the Model
+
+===== cell 24 [markdown] =====
+At this point, you are free to use any type of model that you like, but in practice we've observed that a simple full-connected neural network can often perform quite well. For this example notebook, we'll create and train this network in Pytorch, but any framework that can export a model to the [ONNX](https://onnx.ai/) format will also work.
+
+===== cell 25 [markdown] =====
+## Loading Data
+
+===== cell 26 [code] =====
+# Load the data prepared in previous steps (it's small enough to load entirely in memory)
+
+negative_features = np.load("negative_features.npy")
+positive_features = np.load("turn_on_the_office_lights_features.npy")
+
+X = np.vstack((negative_features, positive_features))
+y = np.array([0]*len(negative_features) + [1]*len(positive_features)).astype(np.float32)[...,None]
+
+# Make Pytorch dataloader
+batch_size = 512
+training_data = torch.utils.data.DataLoader(
+    torch.utils.data.TensorDataset(torch.from_numpy(X), torch.from_numpy(y)),
+    batch_size = batch_size,
+    shuffle = True
+)
+
+
+===== cell 27 [markdown] =====
+## Define Model
+
+===== cell 28 [code] =====
+# Define fully-connected network in PyTorch
+
+layer_dim = 32
+fcn = nn.Sequential(
+                    nn.Flatten(),
+                    nn.Linear(X.shape[1]*X.shape[2], layer_dim), # since the input is flattened, it's timesteps*feature columns
+                    nn.LayerNorm(layer_dim),
+                    nn.ReLU(),
+                    nn.Linear(layer_dim, layer_dim),
+                    nn.LayerNorm(layer_dim),
+                    nn.ReLU(),
+                    nn.Linear(layer_dim, 1),
+                    nn.Sigmoid(),
+                )
+
+loss_function = torch.nn.functional.binary_cross_entropy
+optimizer = torch.optim.Adam(fcn.parameters(), lr=0.001)
+
+
+===== cell 29 [markdown] =====
+## Train Model
+
+===== cell 30 [code] =====
+# Define training loop, metrics, and logging
+
+n_epochs = 10
+history = collections.defaultdict(list)
+for i in tqdm(range(n_epochs), total=n_epochs):
+    for batch in training_data:
+        # Get data for batch
+        x, y = batch[0], batch[1]
+        
+        # Get weights for classes, and assign 10x higher weight to negative class
+        # to help the model learn to not have too many false-positives
+        # As you have more data (both positive and negative), this is less important
+        weights = torch.ones(y.shape[0])
+        weights[y.flatten() == 1] = 0.1
+        
+        # Zero gradients
+        optimizer.zero_grad()
+        
+        # Run forward pass
+        predictions = fcn(x)
+        
+        # Update model parameters
+        loss = loss_function(predictions, y, weights[..., None])
+        loss.backward()
+        optimizer.step()
+        
+        # Log metrics
+        history['loss'].append(float(loss.detach().numpy()))
+        
+        tp = sum(predictions.flatten()[y.flatten() == 1] >= 0.5)
+        fn = sum(predictions.flatten()[y.flatten() == 1] < 0.5)
+        history['recall'].append(float(tp/(tp+fn).detach().numpy()))
+
+
+===== cell 31 [code] =====
+# Plot training metrics
+
+plt.figure()
+plt.plot(history['loss'], label="loss")
+plt.plot(history['recall'], label="recall")
+plt.legend()
+plt.ylim(0,1)
+
+
+===== cell 32 [markdown] =====
+## Try the Model on an Example Clip
+
+===== cell 33 [markdown] =====
+To confirm that the model is working as expected, let's test it on an example audio file (obtained from Youtube) of someone talking and then saying the phrase "turn on the office lights" at the end of the clip. We'll simulate how the model would be used in production, by predicting every 80 ms (1280 samples) and plotting the predictions over time.
+
+This clip is a good sanity test to confirm the model is performing in the right way, as it contains about ~30 seconds of speech that does no contain the target phrase, but does contain related words (e.g., "lights") that should not result in an activation. So ideally, the model scores are low up to the end of the recording, where there should then be a spike right after the target spoken phrase.
+
+===== cell 34 [code] =====
+# Load data
+sr, dat = scipy.io.wavfile.read("training_tutorial_data/turn_on_the_office_lights_test_clip.wav")
+
+# Pre-compute audio features using helper function
+features = F._get_embeddings(dat)
+
+# Get predictions for each window
+scores = []
+for i in tqdm(range(0, features.shape[0]-28)): # 28 is the number of timestep frames for this model
+    window = features[i:i+28][None,]
+    with torch.no_grad():
+        scores.append(float(fcn(torch.from_numpy(window)).detach().numpy()))
+    
+plt.figure()
+_ = plt.plot(scores)
+_ = plt.ylim(0,1)
+
+
+===== cell 35 [markdown] =====
+Overall, the model is working well on this test clip. There are a few spikes around the word "lights" spoken in other contexts, but the clear activation is around the entire phrase.
+
+To make this test a little more difficult, let's arbitrarily mix the test clip with some background music from the fma-large dataset at a low signal-to-noise ratio to simulate a more realistic (and challenging) scenario. Listen to the clip below to get a more intuitive feel of what the type of audio environment this represents.
+
+===== cell 36 [code] =====
+# Load two clips and mix them
+_, dat = scipy.io.wavfile.read("turn_on_the_office_lights_test_clip.wav")
+_, dat_music = scipy.io.wavfile.read("fma_sample/000182.wav")
+dat[-20*16000:] = (dat[-20*16000:] + dat_music[0:20*16000]*.7)/2 #quick manual mixing
+
+ipd.display(ipd.Audio(dat[-16000*6:], rate=16000, normalize=True, autoplay=False))
+
+===== cell 37 [code] =====
+# Pre-compute audio features using helper function
+features = F._get_embeddings(dat)
+
+# Get predictions for each window
+scores = []
+for i in tqdm(range(0, features.shape[0]-28)): # 28 is the number of timestep frames for this model
+    window = features[i:i+28][None,]
+    with torch.no_grad():
+        scores.append(float(fcn(torch.from_numpy(window)).detach().numpy()))
+    
+plt.figure()
+_ = plt.plot(scores)
+_ = plt.ylim(0,1)
+
+===== cell 38 [markdown] =====
+The model is now less confidant in it's prediction than before, but the score is still above a default score of 0.5 which confirms that the model at least represents a good starting point.
+
+===== cell 39 [markdown] =====
+# Export the Model
+
+===== cell 40 [markdown] =====
+Now that the model is trained and passes basic performance validation tests, it can be exported to ONNX so that it can be used by the openWakeWord inference engine. With Torch, this process is quite simple.
+
+===== cell 41 [code] =====
+# Export model to ONNX format
+
+output_path = "turn_on_the_office_lights.onnx"
+torch.onnx.export(fcn, args=torch.zeros((1, 28, 96)), f=output_path) # the 'args' is the shape of a single example
+
+===== cell 42 [markdown] =====
+# Evaluate the Model
+
+===== cell 43 [markdown] =====
+Let's now load in the ONNX model with openWakeWord, and use that to run some more rigorous testing. First, let's just confirm that the ONNX model works as expected.
+
+===== cell 44 [code] =====
+# Create openWakeWord instance
+
+oww = openwakeword.Model(
+    wakeword_model_paths=["turn_on_the_office_lights.onnx"],
+    enable_speex_noise_suppression=True,
+    vad_threshold=0.5
+)
+
+
+===== cell 45 [code] =====
+# Do a quick test prediction on the test clip to confirm that the behavior is still as expected
+
+scores = oww.predict_clip("turn_on_the_office_lights_test_clip.wav")
+
+plt.figure()
+_ = plt.plot([i["turn_on_the_office_lights"] for i in scores])
+
+===== cell 46 [markdown] =====
+Since that looks fine, we can now conduct a more rigorous test to evaluate the false-accept rate in something closer to a production scenario. Specifically, we want the openWakeWord models to respond consistently when a user speaks the target wake word/phrase, but also does not activate even in the presence of many hours of continuous background noise and un-related speech.
+
+To test that, we'll use a few clips (for a total of ~ 1 hour) from the [Santa Barbara Corpus of Spoken American English](https://www.linguistics.ucsb.edu/research/santa-barbara-corpus) to produce a more realistic metric for the false-activation rate per hour.
+
+The combined clip (already converted to a single-channel, 16khz, 16-bit WAV file) can be downloaded [here](https://f002.backblazeb2.com/file/openwakeword-resources/data/santa_barbara_corpus_test_clip.wav).
+
+
+===== cell 47 [code] =====
+# Estimate the false-accept rate on realistic test data (will take up to several minutes an a desktop-grade CPU)
+
+scores = oww.predict_clip("santa_barbara_corpus_test_clip.wav")
+
+plt.figure()
+_ = plt.plot([i["turn_on_the_office_lights"] for i in scores])
+_ = plt.ylim(0,1)
+
+===== cell 48 [code] =====
+# Calculate the false-accept rate per hour from this result
+
+false_accepts = openwakeword.metrics.get_false_positives(
+    [i["turn_on_the_office_lights"] for i in scores], threshold=0.5
+)
+
+print(f"False-accept rate per hour: {false_accepts/1}")
+
+===== cell 49 [markdown] =====
+It looks like the false-accept rate for this model is very high, and would need to be reduced quite significantly to be viable for a production deployment. Of course, this was expected as the model was trained on a very small amount of positive and negative data.
+
+===== cell 50 [markdown] =====
+# Create a User-specific Verifier Model
+
+===== cell 51 [markdown] =====
+As we saw, the simple model trained on this dataset performs quite well at detecting the presence of the wakeword/phrase, but often activates when it shouldn't, leading to an unnacceptably high false-accept rate.
+
+In practice, there are two ways to improve the performance of the model:
+
+1) Train on much larger amounts of positive and negative examples. The models released with openWakeWord are often trained on >100,000 positive examples, and over 30,000 hours of negative data.
+
+2) Create a user-specific "verifier" model based on examples of a specific person speaking the both the wake word/phrase and unrelated speech. The openWakeWord inference engine uses this verifier model to filter out likely false activations by focusing on only known speakers.
+
+We'll demonstrate the 2nd option here, as it's a very quick way to significantly improve performance at the cost of making the model far less likely to work well with other voices. The approach behind this verifier model are relatively simple, and are discussed in more detail in the openWakeWord documentation [here](https://github.com/dscripka/openWakeWord/docs/custom_verifier_models.md).
+
+For test data, we'll use 20 examples of the wake phrase generated with the [Tortoise](https://github.com/neonbjb/tortoise-tts) TTS model. While this is also synthetic data, it's very high quality and trained on different data than the TTS models used to generate training data. For unrelated speech, an English [phonetic pangram](https://www.liqu
+
+===== cell 52 [code] =====
+# Provide paths to positive and negative speech from the target speaker for training a custom
+# verifier model
+
+reference_clips = [str(i) for i in Path("training_tutorial_data/positive/").glob("*.wav")]
+negative_clips = [str(i) for i in Path("training_tutorial_data/negative/").glob("*.wav")]
+
+# Listen to one of the clips
+ipd.display(ipd.Audio(reference_clips[0], rate=16000, normalize=True, autoplay=False))
+
+===== cell 53 [markdown] =====
+Now that we have the data (note that all of the clips *must* be 16 khz, 16-bit PCM WAV files), we can train a custom verifier model. This is simply a scikit-learn logistic regression model, using the same audio features from the normal openWakeWord pre-processor, so it is very fast to train and adds negligble time to the openWakeWord inference engine.
+
+===== cell 54 [code] =====
+# Train verifier model on the reference clips
+
+output_model_path = "turn_on_the_office_lights_verifier.pkl"
+openwakeword.train_custom_verifier(
+    positive_reference_clips = reference_clips[0:3], # use 3 reference examples for the wake phrase
+    negative_reference_clips = negative_clips,
+    output_path = output_model_path,
+    model_name = "turn_on_the_office_lights.onnx"
+)
+
+
+===== cell 55 [markdown] =====
+After the model is trained, we can instantiate a new openWakeWord instance and include the path to the trained verifier model, as well as set the threshold score from the base model required to invoke the verifier. In practice, you can set this threshold score a bit lower than normal, though as usual actual testing in the deployment environment is recommended.
+
+===== cell 56 [code] =====
+# Create openWakeWord instance with verifier model
+
+oww = openwakeword.Model(
+    wakeword_model_paths=["turn_on_the_office_lights.onnx"],
+    enable_speex_noise_suppression=True,
+    vad_threshold=0.5,
+    custom_verifier_models={"turn_on_the_office_lights": "turn_on_the_office_lights_verifier.pkl"},
+    custom_verifier_threshold=0.3,
+)
+
+
+===== cell 57 [markdown] =====
+Finally, we can run the model on our test clip from the Santa Barbara corpus and see if the false activation rate has decreased to an acceptable level.
+
+===== cell 58 [code] =====
+# Run false-accept rate test again, now with the verifier model
+
+scores = oww.predict_clip("santa_barbara_corpus_test_clip.wav")
+
+plt.figure()
+plt.plot([i["turn_on_the_office_lights"] for i in scores])
+_ = plt.ylim(0,1)
+
+
+===== cell 59 [code] =====
+# Calculate the false-accept rate per hour from this new result
+
+false_accepts = openwakeword.metrics.get_false_positives(
+    [i["turn_on_the_office_lights"] for i in scores], threshold=0.5
+)
+
+print(f"False-accept rate per hour: {false_accepts/1}")
+
+===== cell 60 [markdown] =====
+Sucess! Now the false-activation rate is at most <1 per hour given that there weren't any false-positives in our ~1 hour test clip, which is an orders of magnitude decrease! This model is now much closer to being ready for a production deployment, assuming that each user is known and can provide the neccessary data to train the verifier model.
+

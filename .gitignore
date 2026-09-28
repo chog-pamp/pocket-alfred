@@ -1,0 +1,11 @@
+firmware/.pio/
+tools/oww-venv/
+docs/pocket-flash.zip
+tools/train_alfred/*.zip
+tools/train_alfred/*.npy
+tools/train_alfred/*.wav
+tools/train_alfred/*_log*.txt
+tools/train_alfred/eval_*.txt
+tools/train_alfred/*_sample/
+tools/train_alfred/*.npy
+__pycache__/
