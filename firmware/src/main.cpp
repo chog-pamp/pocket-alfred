@@ -14,9 +14,11 @@ WiFiMulti wifiMulti;
 Face face;
 Grid grid;
 Capture capture;
+M5Canvas canvas(&M5.Lcd);   // off-screen sprite: allt ritas här, flippas i ett steg
 
 FaceState faceState = FACE_IDLE;
 int activeScreen = 0;
+int screenGen = 0;
 String replyAcc = "";
 String sessionId = "";
 long RPC_ID_SESSION_CREATE = 0;
@@ -55,6 +57,8 @@ void setup() {
   }
   M5.Lcd.println("\nWiFi OK " + WiFi.localIP().toString());
   Serial.println("[pocket-alfred] wifi connected: " + WiFi.localIP().toString());
+  canvas.setColorDepth(16);                    // RGB565 sprite
+  canvas.createSprite(320, 240);
   gatewayConnect();
   Serial.println("[pocket-alfred] gateway connect initiated");
 }
@@ -73,7 +77,7 @@ void loop() {
       int dx = t.x - lastX, dy = t.y - lastY;
       if (abs(dx) > 60 && abs(dx) > abs(dy)) {
         activeScreen = 1 - activeScreen;
-        if (activeScreen) grid.draw(); else face.draw();
+        screenGen++;                            // tvinga repaint av nya skärmen
       } else if (activeScreen == 1) {
         int idx = grid.touch(t.x, t.y, dy);
         if (idx >= 0) { face.bounce = 1.0f; activeScreen = 0; sendPrompt(ACTIONS[idx].prompt); }
@@ -82,10 +86,11 @@ void loop() {
     }
   }
 
-  static uint32_t lastDraw = 0;
-  if (millis() - lastDraw > 66) {                  // ~15 fps
-    lastDraw = millis();
-    if (activeScreen == 0) face.draw();
+  // rendering: Face.draw/Grid.draw avgör själva om repaint behövs (dirty-check)
+  if (activeScreen == 0) {
+    face.draw(canvas);
+  } else {
+    grid.draw(canvas);
   }
   if (faceState == FACE_LISTENING) {
     if (capture.chunk()) {
