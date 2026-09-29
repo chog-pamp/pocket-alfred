@@ -210,6 +210,8 @@ void gatewayConnect() {
 #endif
   ws.onEvent(onWsEvent);
   ws.setReconnectInterval(5000);
+  // död TCP (WiFi-dropp) detekteras: ping utan pong → lib disconnect+reconnect
+  ws.enableHeartbeat(10000, 5000, 2);
 }
 
 void gatewayLoop() { ws.loop(); }
