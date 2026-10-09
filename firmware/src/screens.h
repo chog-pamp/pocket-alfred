@@ -1,139 +1,162 @@
 #pragma once
 #include <M5Unified.h>
 
-// Skärmar: glad emoji (standard) + scrollbart 2-kolumners knappgrid.
-// All rendering till en M5Canvas (off-screen sprite) som flippas i ETT steg —
-// ingen fillScreen-blinkning. Face.draw() ritar bara om vid FÖRÄNDRING.
+// Pocket Alfred UI v2 — "butler clipart" logga + state-färger, modernt mörkt grid.
+// Butler: hatt (med state-färgat band), ansikte, fluga — ritad med shapes (ingen bitmap-fil).
+// State-färger: IDLE grå · LISTENING mint-puls · THINKING blå spin · SPEAKING gul puls.
+// All rendering → M5Canvas sprite, EN pushSprite per frame, dirty-check (INGEN flicker).
 
 enum FaceState { FACE_IDLE, FACE_LISTENING, FACE_THINKING, FACE_SPEAKING };
 extern FaceState faceState;
-extern int activeScreen;           // 0 = face, 1 = grid
-extern int screenGen;              // ökas när skärmbytje sker → tvingar repaint
+extern int activeScreen;           // 0 = butler, 1 = grid
+extern int screenGen;              // ökas vid skärmbyte → tvingar repaint
+
+// state-accentfärg (RGB565 via color565 av RGB)
+static inline uint16_t stateColor(FaceState s, float pulse = 1.0f) {
+  uint8_t r = 158, g = 158, b = 158;                     // IDLE: grå
+  if (s == FACE_LISTENING)  { r = 100; g = 255; b = 218; }  // mint
+  if (s == FACE_THINKING)   { r = 79;  g = 195; b = 247; }  // blå
+  if (s == FACE_SPEAKING)   { r = 255; g = 213; b = 79;  }  // gul
+  return M5.Display.color565((uint8_t)(r * pulse), (uint8_t)(g * pulse), (uint8_t)(b * pulse));
+}
 
 struct Face {
-  float bounce = 0;
-  FaceState drawnState = FACE_IDLE;   // vad som senast ritades
-  int drawnGen = -1;                  // screenGen när senast ritad
+  FaceState drawnState = FACE_IDLE;
+  int drawnGen = -1;
   uint32_t lastDrawMs = 0;
 
-  // rita om ansiktet på canvasen (utan flipp)
   void paint(M5Canvas& c) {
-    int cx = 160, cy = 120 + (int)(bounce * -14);
+    const int cx = 160, cy = 118;
     uint32_t t = millis();
-    bool blink = (t / 3500) % 10 == 0 && (t % 3500) < 150;
-    int mouthW = (faceState == FACE_SPEAKING) ? 18 + ((t / 90) % 3) * 10 : 34;
-    c.fillScreen(faceState == FACE_IDLE ? 0x000000 : 0x001028);
+    c.fillScreen(0x0A0A0C);
+    uint16_t acc = stateColor(faceState);
 
-    // spin-ring medans Alfred tänker (roterande båge runt huvudet)
+    // pulsfaktor: listening/speaking pulserar mjukt, thinking konstant (spin-ring fixar livet)
+    float pulse = 1.0f;
+    if (faceState == FACE_LISTENING || faceState == FACE_SPEAKING)
+      pulse = 0.75f + 0.25f * sinf(t / 260.0f);
+
+    // thinking: roterande kometsvans-ring runt butlern
     if (faceState == FACE_THINKING) {
-      int r = 92;
-      float a = (t / 8) % 360 * 0.0174533f;    // snabb rotation
-      for (int i = 0; i < 16; i++) {           // svans: 16 punkter, avtagande ljusstyrka
-        float ang = a - i * 0.09f;
-        uint8_t shade = 255 - i * 15;
-        c.fillCircle(cx + (int)(cosf(ang) * r), cy + (int)(sinf(ang) * r), 5 - i / 6,
-                     M5.Display.color565(shade, shade * 0.75f, 255));
+      float a = (t / 7) % 360 * 0.0174533f;
+      for (int i = 0; i < 18; i++) {
+        float ang = a - i * 0.10f;
+        float rr = 92 + sinf(t / 400.0f) * 3;
+        uint8_t shade = 255 - i * 13;
+        c.fillCircle(cx + (int)(cosf(ang) * rr), cy + (int)(sinf(ang) * rr),
+                     5 - i / 7, M5.Display.color565(shade * 0.31f, shade * 0.76f, shade));
       }
+    } else {
+      // puls-ring runt loggan (tunn, växer/dimmar med pulsen)
+      int rr = 86 + (int)(pulse * 6);
+      c.drawCircle(cx, cy, rr, stateColor(faceState, pulse * 0.45f));
+      c.drawCircle(cx, cy, rr - 3, stateColor(faceState, pulse * 0.25f));
     }
 
-    c.fillCircle(cx, cy, 78, 0xFFD54F);          // huvud
-    int ey = cy - 18;
-    if (blink) {                                          // blinkning (alla lägen)
-      c.fillRect(cx - 34, ey, 22, 5, 0x333333);
-      c.fillRect(cx + 12, ey, 22, 5, 0x333333);
-    } else if (faceState == FACE_LISTENING) {
-      // förvånad: stora ögon + upphöjda ögonbryn
-      c.fillCircle(cx - 24, ey, 14, 0x222222);
-      c.fillCircle(cx + 24, ey, 14, 0x222222);
-      c.fillCircle(cx - 24, ey, 5, 0xFFFFFF);
-      c.fillCircle(cx + 24, ey, 5, 0xFFFFFF);
-      c.fillRect(cx - 38, ey - 24, 28, 5, 0x222222);
-      c.fillRect(cx + 10, ey - 24, 28, 5, 0x222222);
-    } else if (faceState == FACE_THINKING) {
-      c.fillRect(cx - 34, ey + 6, 22, 5, 0x333333);   // halvslutna, skeptiska
-      c.fillRect(cx + 12, ey + 2, 22, 5, 0x333333);
+    // ── hatt ──
+    c.fillRect(cx - 26, cy - 82, 52, 40, 0x111114);        // krona
+    c.fillRect(cx - 42, cy - 44, 84, 8, 0x111114);         // brätten
+    c.fillRect(cx - 26, cy - 52, 52, 8, acc);              // hatband (state-färg)
+
+    // ── ansikte ──
+    c.fillCircle(cx, cy - 8, 34, 0xE8E8E8);                // huvud
+    c.fillCircle(cx - 12, cy - 14, 3, 0x1A1A1A);           // öga v
+    c.fillCircle(cx + 12, cy - 14, 3, 0x1A1A1A);           // öga h
+    // mustasch
+    c.fillRect(cx - 14, cy + 2, 28, 5, 0x2A2A2E);
+    c.fillCircle(cx - 15, cy + 4, 4, 0x2A2A2E);
+    c.fillCircle(cx + 15, cy + 4, 4, 0x2A2A2E);
+    // mun: speaking → animerad; annars lugn linje
+    if (faceState == FACE_SPEAKING) {
+      int mw = 8 + ((t / 110) % 3) * 6;
+      c.fillRect(cx - mw, cy + 12, mw * 2, 5, 0x1A1A1A);
     } else {
-      c.fillCircle(cx - 24, ey, 11, 0x222222);
-      c.fillCircle(cx + 24, ey, 11, 0x222222);
+      c.fillRect(cx - 9, cy + 12, 18, 3, 0x1A1A1A);
     }
-    if (faceState == FACE_LISTENING) {
-      // öppen "O"-mun — lyssnar aktivt, pulserar
-      int mo = 16 + ((t / 200) % 2) * 5;
-      c.fillCircle(cx, cy + 32, mo, 0x222222);
-    } else {
-      int mw = (faceState == FACE_SPEAKING) ? mouthW : 34;
-      c.fillRect(cx - mw, cy + 26, mw * 2, 10, 0x222222);
-      c.fillCircle(cx - mw, cy + 31, 10, 0x222222);
-      c.fillCircle(cx + mw, cy + 31, 10, 0x222222);
+
+    // ── kravat + fluga ──
+    c.fillRect(cx - 18, cy + 26, 36, 10, 0xFFFFFF);        // kravat
+    c.fillTriangle(cx - 20, cy + 31, cx - 4, cy + 24, cx - 4, cy + 38, acc);  // fluga v
+    c.fillTriangle(cx + 20, cy + 31, cx + 4, cy + 24, cx + 4, cy + 38, acc);  // fluga h
+    c.fillCircle(cx, cy + 31, 4, acc);                     // knut
+    if (faceState == FACE_SPEAKING) {                      // fluga "pratar"-puls
+      uint16_t dim = stateColor(faceState, pulse);
+      c.fillCircle(cx, cy + 31, 6 + (int)(pulse * 4), dim);
     }
-    if (faceState == FACE_IDLE || faceState == FACE_SPEAKING) {  // kinder
-      c.fillCircle(cx - 46, cy + 14, 9, 0xFF8A80);
-      c.fillCircle(cx + 46, cy + 14, 9, 0xFF8A80);
-    }
-    bounce *= 0.92f;
+
+    // status-text
+    c.setTextColor(0x8A8A92, 0x0A0A0C);
+    c.setTextSize(2);
+    c.setTextDatum(4);    // middle_center (M5GFX: MC = 4)
+    const char* label = "Alfred";
+    if (faceState == FACE_LISTENING) label = "Lyssnar...";
+    if (faceState == FACE_THINKING)  label = "Tankar...";
+    if (faceState == FACE_SPEAKING)  label = "Svarar...";
+    c.drawString(label, cx, 224);
+    c.setTextDatum(0);    // top_left (M5GFX textdatum enum)
   }
 
-  // anropas från loop() — ritar om ENDAST när state ändrats eller en animation
-  // verkligen behöver nya frames (thinking-spin, listening-puls, speaking-mun,
-  // aktiva blinkningar). Idle = 1 paint/flipp per blink, annars lugnt.
+  // dirty-check: repaint endast vid state-byte, animation, eller skärmbyte
   void draw(M5Canvas& c) {
     uint32_t t = millis();
-    bool animating = (faceState == FACE_THINKING) || (faceState == FACE_LISTENING) ||
-                     (faceState == FACE_SPEAKING);
-    bool blinkActive = (t / 3500) % 10 == 0 && (t % 3500) < 200;
-    bool bounceActive = bounce > 0.15f;
-
-    if (!animating && !blinkActive && !bounceActive && faceState == drawnState &&
-        drawnGen == screenGen) {
-      return;                                   // inget nytt — ingen repaint
-    }
-    // begränsa fps endast när vi faktiskt animerar
+    bool animating = faceState != FACE_IDLE;
+    if (!animating && faceState == drawnState && drawnGen == screenGen) return;
     if (animating && t - lastDrawMs < 50) return;
     lastDrawMs = t;
     paint(c);
     drawnState = faceState;
     drawnGen = screenGen;
-    c.pushSprite(0, 0);                         // EN flipp — ingen blinkning
+    c.pushSprite(0, 0);
   }
 };
 
-// ── Actions (2 kolumner, scrollbar) ──────────────────────────────────────────
+// ── Actions (2x2 synliga, scrollbar för framtiden) ───────────────────────────
 struct Action { const char* label; const char* prompt; uint32_t color; };
 static const Action ACTIONS[] = {
-  {"Mail",   "Kolla min mail och rapportera kort om n\u00e5got viktigt dykt upp.", 0x4FC3F7u},
-  {"Schema", "Vad har jag p\u00e5 schemat idag? Sammanfatta kort.",                0x81C784u},
-  {"Kanban", "Vad ligger f\u00f6r nya kanban-uppgifter \u00e5t mig? Kort please.",  0xFFB74Du},
-  {"Brief",  "Ge mig en kort daglig briefing.",                                    0xBA68C8u},
+  {"Brief",   "Ge mig en kort daglig briefing.",                                        0xBA68C8u},
+  {"Mail",    "Kolla min mail och rapportera kort om n\u00e5got viktigt dykt upp.",     0x4FC3F7u},
+  {"Schema",  "Vad har jag p\u00e5 schemat idag och resten av veckan? Kort please.",    0x81C784u},
+  {"Nyheter", "Sammanfatta dagens nyheter kort.",                                       0xFFB74Du},
 };
 static const int N_ACTIONS = sizeof(ACTIONS) / sizeof(ACTIONS[0]);
 
 struct Grid {
-  int scrollRows = 0;              // 0-baserad första synliga rad
-  int lastScroll = -1;             // för att veta när vi behöver rita om
-  int drawnGen = -1;               // screenGen när senast ritad
+  int scrollRows = 0;
+  int lastScroll = -1;
+  int drawnGen = -1;
 
   void paint(M5Canvas& c) {
-    c.fillScreen(0x101014);
-    c.setTextColor(0xAAAAAA, 0x101014);
+    c.fillScreen(0x0A0A0C);
+    // header: "Alfred" + litet status-dot i state-färg
+    c.setTextColor(0xE8E8E8, 0x0A0A0C);
+    c.setTextSize(2);
+    c.setCursor(12, 8);
+    c.print("Alfred");
+    c.fillCircle(296, 14, 5, stateColor(faceState));
+    c.setTextColor(0x55555C, 0x0A0A0C);
     c.setTextSize(1);
-    c.setCursor(8, 6);
-    c.print("Alfred  \u2190\u2192 svep = byt sk\u00e4rm");
-    const int W = 150, H = 70, GX = 10, GY = 12, TOP = 24;
-    int rows = (N_ACTIONS + 1) / 2;
+    c.setCursor(78, 14);
+    c.print("actions");
+
+    const int W = 145, H = 88, GX = 10, GY = 12, TOP = 36;
     for (int i = 0; i < N_ACTIONS; i++) {
       int r = i / 2, c2 = i % 2;
       int y = TOP + (r - scrollRows) * (H + GY);
-      if (y + H < TOP || y > 240) continue;           // utanför skärmen
+      if (y + H < TOP || y > 240) continue;
       int x = c2 * (W + GX) + (320 - 2 * W - GX) / 2;
-      c.fillRoundRect(x, y, W, H, 8, ACTIONS[i].color);
-      c.setTextColor(0x000000, ACTIONS[i].color);
+      c.fillRoundRect(x, y, W, H, 10, 0x16161C);          // card
+      c.fillRoundRect(x, y, 5, H, 2, ACTIONS[i].color);   // accent-kant vänster
+      c.setTextColor(0xF0F0F0, 0x16161C);
       c.setTextSize(2);
-      c.setCursor(x + 14, y + 26);
+      c.setCursor(x + 16, y + 34);
       c.print(ACTIONS[i].label);
+      c.setTextColor(0x55555C, 0x16161C);
+      c.setTextSize(1);
+      c.setCursor(x + 16, y + 62);
+      c.print("tap");
     }
   }
 
-  // Rita om endast när scroll ändrats, generation bytt eller första gången
   void draw(M5Canvas& c) {
     if (lastScroll == scrollRows && drawnGen == screenGen) return;
     paint(c);
@@ -142,13 +165,12 @@ struct Grid {
     c.pushSprite(0, 0);
   }
 
-  // returnerar index för tryckt knapp, eller -1; uppdaterar scroll vid dra
   int touch(int tx, int ty, int dy) {
     if (dy > 30) { scrollRows = max(0, scrollRows - 1); return -1; }
-    if (dy < -30) { int rows = (N_ACTIONS + 1) / 2; int maxRows = rows - 3;
+    if (dy < -30) { int rows = (N_ACTIONS + 1) / 2; int maxRows = rows - 2;
                     if (maxRows > 0 && scrollRows < maxRows) scrollRows++;
                     return -1; }
-    const int W = 150, H = 70, GX = 10, TOP = 24;
+    const int W = 145, H = 88, GX = 10, TOP = 36;
     for (int i = 0; i < N_ACTIONS; i++) {
       int r = i / 2, c2 = i % 2;
       int y = TOP + (r - scrollRows) * (H + 12);
