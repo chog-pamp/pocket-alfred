@@ -9,3 +9,7 @@ tools/train_alfred/eval_*.txt
 tools/train_alfred/*_sample/
 tools/train_alfred/*.npy
 __pycache__/
+firmware/include/secrets.h
+server/session-token.txt
+server/dashboard-basic-pass.txt
+tools/train_alfred/negative_nearmiss/
