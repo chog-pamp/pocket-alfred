@@ -13,3 +13,9 @@ firmware/include/secrets.h
 server/session-token.txt
 server/dashboard-basic-pass.txt
 tools/train_alfred/negative_nearmiss/
+# accidental root venv (`python3 -m venv` was run against the repo root)
+/bin/
+/include/
+/lib/
+/lib64
+/pyvenv.cfg

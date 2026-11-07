@@ -51,12 +51,15 @@ bool talking = false;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 static String b64enc(const uint8_t* src, size_t len) {
+  // 32-byte input → 44 b64 chars + NUL; mbedtls includes the NUL in olen.
+  // NOTE: must build the String from a real char buffer — writing through
+  // String::begin() never updates the Arduino String length (sends empty).
+  char buf[64];
   size_t olen = 0;
   mbedtls_base64_encode(nullptr, 0, &olen, src, len);
-  String out; out.reserve(olen);
-  mbedtls_base64_encode((uint8_t*)out.begin(), olen, &olen, src, len);
-  out[olen - 1] = 0;
-  return out;
+  if (olen == 0 || olen > sizeof(buf)) return String();
+  mbedtls_base64_encode((uint8_t*)buf, sizeof(buf), &olen, src, len);
+  return String(buf);
 }
 
 static String hmacAuth(const String& nonce) {
@@ -286,11 +289,11 @@ void gadgetConnect() {
     mbedtls_sha256(devKey, 32, hash, 0);
     static const char* hex = "0123456789abcdef";
     devId[0] = 'h'; devId[1] = 'g'; devId[2] = '-';
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 8; i++) {
       devId[3 + i * 2]     = hex[hash[i] >> 4];
       devId[3 + i * 2 + 1] = hex[hash[i] & 0xF];
     }
-    devId[35] = 0;
+    devId[19] = 0;
     Serial.printf("[gadget] new device id %s\n", devId);
   }
 
