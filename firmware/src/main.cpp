@@ -1,5 +1,5 @@
 // Pocket Alfred — M5Stack Core2 — Hermes Gadget protocol client
-// Hold middle zone (bottom row) = talk (PCM16 upload) · left = cancel · right = new session
+// Tap middle zone (bottom row) = start talk (PCM16 upload), tap again = end · left = cancel · right = new session
 // Swipe = switch screen (face ↔ grid). Grid tap = text message. Replies open a card screen.
 #include <M5Unified.h>
 #include <WiFi.h>
@@ -155,6 +155,8 @@ void loop() {
     auto t = M5.Touch.getDetail();
     if (t.state == m5::touch_state_t::touch_begin) {
       lastX = t.x; lastY = t.y;
+      // tap-toggle recording: while talking, ANY tap ends the utterance
+      if (talking) { stopTalk(); return; }
       // prompt screen: tap zones answer
       if (gScreen == 4 && gPromptId.length() && t.y > 190) {
         gadgetPromptReply(t.x >= 160);
@@ -168,9 +170,7 @@ void loop() {
       }
     } else if (lastX >= 0 && t.state == m5::touch_state_t::touch_end) {
       int dx = t.x - lastX, dy = t.y - lastY;
-      if (talking) {
-        stopTalk();                               // release = send utterance
-      } else if (abs(dx) > 60 && abs(dx) > abs(dy) && gScreen != 4) {
+      if (!talking && abs(dx) > 60 && abs(dx) > abs(dy) && gScreen != 4) {
         if (gScreen == 0 || gScreen == 2) gScreen = 1;
         else if (gScreen == 1)            gScreen = 0;
         screenGen++;
